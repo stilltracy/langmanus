@@ -127,15 +127,30 @@ def planner_node(state: State) -> Command[Literal["supervisor", "__end__"]]:
         llm = get_llm_by_type("reasoning")
     if state.get("search_before_planning"):
         searched_content = tavily_tool.invoke({"query": state["messages"][-1].content})
-        if isinstance(searched_content, list):
-            messages = deepcopy(messages)
-            messages[
-                -1
-            ].content += f"\n\n# Relative Search Results\n\n{json.dumps([{'title': elem['title'], 'content': elem['content']} for elem in searched_content], ensure_ascii=False)}"
-        else:
-            logger.error(
-                f"Tavily search returned malformed response: {searched_content}"
-            )
+        messages = deepcopy(messages)
+        
+        # Fix: Handle search results properly based on their actual structure
+        search_results_text = ""
+        try:
+            # Check if searched_content is a list of dictionaries with title/content
+            if isinstance(searched_content, list) and all(isinstance(item, dict) for item in searched_content):
+                search_results = []
+                for elem in searched_content:
+                    if 'title' in elem and 'content' in elem:
+                        search_results.append({'title': elem['title'], 'content': elem['content']})
+                search_results_text = json.dumps(search_results, ensure_ascii=False)
+            # Handle case where searched_content might be a string or has a different structure
+            elif isinstance(searched_content, str):
+                search_results_text = searched_content
+            else:
+                # Fallback: convert whatever we got to a string representation
+                search_results_text = str(searched_content)
+            
+            messages[-1].content += f"\n\n# Relative Search Results\n\n{search_results_text}"
+        except Exception as e:
+            logger.error(f"Error processing search results: {e}")
+            # Continue without adding search results
+    
     stream = llm.stream(messages)
     full_response = ""
     for chunk in stream:
