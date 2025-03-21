@@ -25,4 +25,5 @@ if __name__ == "__main__":
         port=8000,
         reload=reload,
         log_level="info",
+        reload_dirs=["src"],
     )
